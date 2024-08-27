@@ -1,6 +1,8 @@
 from os import getcwd
 
 from datetime import datetime
+from os.path import curdir
+from select import select
 from traceback import print_tb
 from urllib.parse import urljoin
 
@@ -29,18 +31,82 @@ class ETL_data30():
             data_to_send['max_temp'] = date['maxtempC']
             data_to_send['uv_Index'] = date['uvIndex']
             for time in date['hourly']:
-                print(type(data_to_send['windspeedKmph']))
                 data_to_send['windspeedKmph'].append(time['windspeedKmph'])
                 data_to_send['visibility'].append(time['visibility'])
                 data_to_send['tempC'].append(time['tempC'])
                 data_to_send['time'].append(time['time'])
             data_to_send['date_interested'] = date['date']
             data_list.append(data_to_send)
-            print(data_to_send, end='\n\n\n\n\n\n\n')
-    def push_data(self):
-        pass
+        return data_list
 
+    def data_transform(self, data):
+        for i in range(len(data)):
+            data[i]['date_request'] = datetime.strptime(f"2024-08-{data[i]['date_request']}", "%Y-%m-%d").date()
+        return data
+    def push_data(self, data:list):
+        import psycopg2
+        try:
+            conn = psycopg2.connect(
+                dbname="postgres",
+                user="postgres",
+                password="29892989",
+                host="localhost",
+                port="5432"
+            )
+            cursor = conn.cursor()
+            insert_query = """
+            INSERT INTO api_data_weather (date_request, date_interested, min_temp, max_temp, uv_Index, windspeedKmph, visibility, tempC, time)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s);
+            """
+            for record in data:
+                date_request = record['date_request']
+                for i in range(len(record['time'])):
+                    print(data)
+                    cursor.execute(insert_query, (
+                        date_request,
+                        record['date_interested'],  # Дата уже в правильном формате
+                        float(record['min_temp']),
+                        float(record['max_temp']),
+                        int(record['uv_Index']),
+                        float(record['windspeedKmph'][i]),
+                        float(record['visibility'][i]),
+                        float(record['tempC'][i]),
+                        float(record['time'][i])
+                    ))
+
+            conn.commit()
+
+            # Закрытие соединения
+            cursor.close()
+            conn.close()
+
+        except Exception as e:
+            print(f"Ошибка при подключении к базе данных: {e}")
+    def get_data_from_ps(self):
+        import psycopg2
+        try:
+            conn = psycopg2.connect(
+                dbname="postgres",
+                user="postgres",
+                password="29892989",
+                host="localhost",
+                port="5432"
+            )
+            cursor = conn.cursor()
+            select_query = """
+            select distinct * from   api_data_weather count order by date_interested;
+            """
+            cursor.execute(select_query)
+            rows = cursor.fetchall()
+            for row in rows:
+                print(row)
+        except Exception as e:
+            print(f'error {e}')
 
 
 etl = ETL_data30()
-etl.getting_data()
+#data = etl.getting_data()
+#etl.push_data(data)
+#data = etl.data_transform(data)
+#etl.push_data(data)
+etl.get_data_from_ps()
